@@ -2,30 +2,33 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "types.h"
 
 // functions
-void substr(const char *start, const char *end, String *string);
+char *read_file(char *path);
+char *substr(const char *start, const char *end);
 
 U64 tok_i = 0;
 Token tokens[256];
 
-char *code = "void add(int x, int y) {\n\	return x + y;\n}";
-
-
-int main(int argc, char **argv) 
+int main()
 {
+	char *code = read_file("test/add.c");
+
 	Keyword k_void = {TOKEN_VOID, "void"};
 	Keyword k_integer = {TOKEN_INTEGER, "int"};
 	Keyword k_return = {TOKEN_RETURN, "return"};
 	Keyword keywords[3] = {k_void, k_integer, k_return};
 
-	const char *begin = code;
-	const char *stream = code;
+	char *begin = code;
+	char *stream = code;
 
 	for(;;)
 	{
+		if (*stream == '\0') break;
+
 		switch (*stream) {
 			case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j':
 			case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': case 's': case 't':
@@ -41,69 +44,73 @@ int main(int argc, char **argv)
 					}
 
 
-					Token token = {};
-					String string;
-
-					substr(begin, stream, &string);
-
-					token.value = string;
+					Token token = {
+						TOKEN_IDENTIFIER,
+						begin, 
+						stream,
+						substr(begin, stream)
+					};
 
 					for (int i = 0; i < 3; i++)
 					{
-						if (strcmp(string.str, keywords[i].value) == 0)
+						if (strcmp(token.value, keywords[i].value) == 0)
 						{
 							token.type = keywords[i].type;
 							break;
 						}
 					}
 
-					if (token.type == NULL) {
-						token.type = TOKEN_IDENTIFIER;
-					}
-
 					begin = stream;
 					tokens[tok_i++] = token;
+					break;
+				}
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9': 
+				{
+					while (isdigit(*stream))
+					{
+						stream++;
+					}
+
+					// TODO: this means that the token value has to be a union that can be an integer
+					// or a char pointer or maybe something else
+					Token token = {
+						TOKEN_INTEGER,
+						begin,
+						stream,
+						substr(begin, stream)
+					};
+
+					tokens[tok_i++] = token;
+					begin = stream;
+
 					break;
 				}
 			case '(':
-				{
-					Token token;
-					String string = {1, "("};
-					token.type = TOKEN_LPAREN;
-					token.value = string;
-					tokens[tok_i++] = token;
-					stream++;
-					begin = stream;
-					break;
-				}
 			case ')':
-				{
-					Token token;
-					String string = {1, ")"};
-					token.type = TOKEN_RPAREN;
-					token.value = string;
-					tokens[tok_i++] = token;
-					stream++;
-					begin = stream;
-					break;
-				}
 			case '{':
-				{
-					Token token;
-					String string = {1, "{"};
-					token.type = TOKEN_LBRACE;
-					token.value = string;
-					tokens[tok_i++] = token;
-					stream++;
-					begin = stream;
-					break;
-				}
 			case '}':
+			case ';':
+			case '"':
+			case '\\':
+			case '%':
+			case '+':
+			case '=':
+			case ',':
 				{
-					Token token;
-					String string = {1, "}"};
-					token.type = TOKEN_RBRACE;
-					token.value = string;
+					char c = *stream;
+					char *cp = malloc(sizeof(char) * 2);
+					cp[0] = c;
+					cp[1] = '\0';
+					Token token = {(int)*stream, begin, stream, cp};
 					tokens[tok_i++] = token;
 					stream++;
 					begin = stream;
@@ -111,7 +118,6 @@ int main(int argc, char **argv)
 				}
 			case ' ':
 			case '\t':
-			case '\n':
 				stream++;
 				begin = stream;
 				break;
@@ -119,21 +125,20 @@ int main(int argc, char **argv)
 
 			default:
 				stream++;
+				begin = stream;
 				break;
 
 		}
-
-		// TODO: remove this
-		if (*stream == '}') break;
-		
 	}
 
-	printf("TOKENS = {\n");
+	printf("TOKENS {\n");
 	for (int i = 0; i < 256; i++)
 	{
-		if (tokens[i].value.str == NULL) continue;
+		if (tokens[i].type == NULL) continue;
 
-		printf("	{type: %d, value: %s}\n", tokens[i].type, tokens[i].value.str);
+		/* printf("SIZE %ld", sizeof(tokens[i].value)); */
+
+		printf("	{type: %d, value: '%s'}\n", tokens[i].type, tokens[i].value);
 
 	}
 	printf("}\n");
@@ -141,13 +146,44 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-void substr(const char *start, const char *end, String *string)
+char *substr(const char *start, const char *end)
 {
 	int len = end - start;
-	char *str = malloc(len);
+	char *str = malloc(len + 1);
 	strncpy(str, start, len);
 
-	string->len = len;
-	string->str = str;
+	str[len] = '\0';
+
+	return str;
 }
 
+char *read_file(char *path)
+{
+#define	READ_FILE_PANIC \
+    do { \
+        fprintf(stderr, "Could not read file `%s`: %s\n", path, strerror(errno)); \
+        exit(1); \
+    } while (0)
+
+	FILE *f = fopen(path, "r");
+	if (f == NULL) READ_FILE_PANIC;
+	if (fseek(f, 0, SEEK_END) < 0) READ_FILE_PANIC;
+
+	long size = ftell(f);
+	if (size < 0) READ_FILE_PANIC;
+	
+	char *buffer = malloc(size + 1);
+	if (buffer == NULL) READ_FILE_PANIC;
+
+	if (fseek(f, 0, SEEK_SET) < 0) READ_FILE_PANIC;
+
+	fread(buffer, sizeof(char), size, f);
+	if (ferror(f) < 0) READ_FILE_PANIC;
+
+	buffer[size] = '\0';
+
+	if (fclose(f) < 0) READ_FILE_PANIC;
+
+	return buffer;
+#undef READ_FILE_PANIC
+}
