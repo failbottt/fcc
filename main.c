@@ -1,21 +1,72 @@
+// to compile and run: 
+// gcc -std=c99 -Wextra -Wall -g -o tokenizer main.c && ./tokenizer
+//
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
-
-#include "types.h"
+#include <stdint.h>
 
 // functions
 char *read_file(char *path);
 char *substr(const char *start, const char *end);
 
-U64 tok_i = 0;
+// types
+//
+// the numbers are ascii codes. They correlate
+// directly to all the string characters in test.add.c
+typedef enum {
+	TOKEN_VOID = 1,
+	TOKEN_LPAREN = 40,
+	TOKEN_RPAREN = 41,
+	TOKEN_LBRACE = 123,
+	TOKEN_RBRACE = 125,
+	TOKEN_SEMICOLON = 59,
+	TOKEN_PERCENT = 37,
+	TOKEN_PLUS = 43,
+	TOKEN_EQUALS = 61,
+	TOKEN_DOUBLE_QUOTE = 34,
+	TOKEN_BACKSLASH = 92,
+	TOKEN_COMMA = 44,
+	TOKEN_POUND = 35,
+	TOKEN_PERIOD = 46,
+	TOKEN_GT= 62,
+	TOKEN_LT= 60,
+
+	TOKEN_INTEGER,
+	TOKEN_IDENTIFIER,
+	TOKEN_RETURN,
+} Type;
+
+typedef struct {
+	Type type;
+	const char *value;
+} Keyword;
+
+typedef struct {
+	Type type;
+	char *start;
+	char *end;
+	char *value;
+} Token;
+
+uint64_t tok_i = 0;
 Token tokens[256];
 
 int main()
 {
-	char *code = read_file("test/add.c");
+	char *code = "#include <stdio.h>\
+		\
+		int add(int x, int y) {\
+			return x + y;\
+		}\
+		\
+		int main() {\
+			int sum = add(2, 3);\
+		\
+			return sum;\
+		}";
 
 	Keyword k_void = {TOKEN_VOID, "void"};
 	Keyword k_integer = {TOKEN_INTEGER, "int"};
@@ -80,12 +131,11 @@ int main()
 						stream++;
 					}
 
-					// TODO: this means that the token value has to be a union that can be an integer
-					// or a char pointer or maybe something else
 					Token token = {
 						TOKEN_INTEGER,
 						begin,
 						stream,
+						// TODO you'd want to turn the string type of the number to it's integer type (e.g. via atoi() ref: https://git.musl-libc.org/cgit/musl/tree/src/stdlib/atoi.c) 
 						substr(begin, stream)
 					};
 
@@ -105,6 +155,10 @@ int main()
 			case '+':
 			case '=':
 			case ',':
+			case '#':
+			case '.':
+			case '<':
+			case '>':
 				{
 					char c = *stream;
 					char *cp = malloc(sizeof(char) * 2);
@@ -134,9 +188,7 @@ int main()
 	printf("TOKENS {\n");
 	for (int i = 0; i < 256; i++)
 	{
-		if (tokens[i].type == NULL) continue;
-
-		/* printf("SIZE %ld", sizeof(tokens[i].value)); */
+		if (tokens[i].type == 0) continue;
 
 		printf("	{type: %d, value: '%s'}\n", tokens[i].type, tokens[i].value);
 
@@ -155,35 +207,4 @@ char *substr(const char *start, const char *end)
 	str[len] = '\0';
 
 	return str;
-}
-
-char *read_file(char *path)
-{
-#define	READ_FILE_PANIC \
-    do { \
-        fprintf(stderr, "Could not read file `%s`: %s\n", path, strerror(errno)); \
-        exit(1); \
-    } while (0)
-
-	FILE *f = fopen(path, "r");
-	if (f == NULL) READ_FILE_PANIC;
-	if (fseek(f, 0, SEEK_END) < 0) READ_FILE_PANIC;
-
-	long size = ftell(f);
-	if (size < 0) READ_FILE_PANIC;
-	
-	char *buffer = malloc(size + 1);
-	if (buffer == NULL) READ_FILE_PANIC;
-
-	if (fseek(f, 0, SEEK_SET) < 0) READ_FILE_PANIC;
-
-	fread(buffer, sizeof(char), size, f);
-	if (ferror(f) < 0) READ_FILE_PANIC;
-
-	buffer[size] = '\0';
-
-	if (fclose(f) < 0) READ_FILE_PANIC;
-
-	return buffer;
-#undef READ_FILE_PANIC
 }

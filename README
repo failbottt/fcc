@@ -1,0 +1,15 @@
+### What this is
+
+This is a simple tokenizer that takes a C function and turns each character into a token. I hadn't done much code parsing, and I wanted to get some idea of what the program would look like.
+
+### What it does
+
+1. Parses the C code
+2. Identifies its type
+3. Prints each token to stdout along with its type.
+
+Again, it's nothing special, just a little demo of what a parser might look like.
+
+### How to build
+
+`./build.sh && ./tokenizer`
